@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { usePolling } from "./use-polling";
 
 export interface Incident {
   id: string;
@@ -19,29 +19,35 @@ export interface Recommendation {
 
 const API_BASE = import.meta.env.VITE_SCUTUM_API ?? "http://localhost:4000";
 
-export function useIncident() {
-  const [incident, setIncident] = useState<Incident | null>(null);
-  const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+export interface IncidentData {
+  incident: Incident | null;
+  recommendations: Recommendation[];
+}
 
-  useEffect(() => {
-    async function fetchData() {
-      try {
-        const [incRes, recRes] = await Promise.all([
-          fetch(`${API_BASE}/incident/current`),
-          fetch(`${API_BASE}/incident/recommendations`),
-        ]);
-        if (incRes.ok) setIncident(await incRes.json());
-        if (recRes.ok) setRecommendations(await recRes.json());
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to connect");
-      } finally {
-        setLoading(false);
+export function useIncident(pollIntervalMs = 5000) {
+  const { data, loading, error } = usePolling<IncidentData>(
+    async () => {
+      const [incRes, recRes] = await Promise.all([
+        fetch(`${API_BASE}/incident/current`),
+        fetch(`${API_BASE}/incident/recommendations`),
+      ]);
+      if (!incRes.ok || !recRes.ok) {
+        throw new Error(
+          `API error: incident ${incRes.status}, recommendations ${recRes.status}`
+        );
       }
-    }
-    fetchData();
-  }, []);
+      return {
+        incident: await incRes.json(),
+        recommendations: await recRes.json(),
+      };
+    },
+    { intervalMs: pollIntervalMs }
+  );
 
-  return { incident, recommendations, loading, error };
+  return {
+    incident: data?.incident ?? null,
+    recommendations: data?.recommendations ?? [],
+    loading,
+    error,
+  };
 }
