@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { usePolling } from "./use-polling";
 
 export interface AuditEntry {
   id: string;
@@ -10,17 +10,15 @@ export interface AuditEntry {
 
 const API_BASE = import.meta.env.VITE_SCUTUM_API ?? "http://localhost:4000";
 
-export function useAudit() {
-  const [entries, setEntries] = useState<AuditEntry[]>([]);
-  const [loading, setLoading] = useState(true);
+export function useAudit(pollIntervalMs = 10000) {
+  const { data, loading, error } = usePolling<AuditEntry[]>(
+    async () => {
+      const res = await fetch(`${API_BASE}/audit`);
+      if (!res.ok) throw new Error(`API error: ${res.status}`);
+      return res.json();
+    },
+    { intervalMs: pollIntervalMs }
+  );
 
-  useEffect(() => {
-    fetch(`${API_BASE}/audit`)
-      .then((res) => res.ok ? res.json() : [])
-      .then(setEntries)
-      .catch(() => setEntries([]))
-      .finally(() => setLoading(false));
-  }, []);
-
-  return { entries, loading };
+  return { entries: data ?? [], loading, error };
 }
